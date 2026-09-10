@@ -1,0 +1,37 @@
+name: Daily Commission Tracker Refresh
+
+on:
+  schedule:
+    # Runs at 8:05 AM ET (12:05 UTC) every weekday
+    - cron: '5 12 * * 1-5'
+  workflow_dispatch:  # allows manual trigger from GitHub Actions UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run refresh script
+        env:
+          SHOPIFY_STORE: ${{ secrets.SHOPIFY_STORE }}
+          SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+          TZ: America/New_York
+        run: python3 update_trackers.py
+
+      - name: Commit and push updated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html matt.html mike.html commission-tracker.html matt-commission-tracker.html mike-commission-tracker.html
+          git diff --staged --quiet || git commit -m "Daily refresh - $(TZ='America/New_York' date '+%B %-d, %Y at %-I:%M %p ET')"
+          git push
