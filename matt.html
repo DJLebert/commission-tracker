@@ -58,6 +58,35 @@ tr.total td { font-weight:700; border-top:2px solid #e5e7eb; border-bottom:none;
 .payrow.balance b{color:#059669;font-size:1rem;}
 .adj-select{font-size:.78rem;padding:2px 4px;border:1px solid #d1d5db;border-radius:4px;background:#fff;cursor:pointer;}
 .adj-total-row td{font-weight:700;background:#f9fafb;}
+
+.paid-input{width:90px;border:1px solid #d1d5db;border-radius:5px;padding:3px 7px;font-size:.85rem;text-align:right;color:#111827;}
+.combined-total{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;margin-bottom:16px;flex-wrap:wrap;gap:8px;}
+.combined-total b{font-size:1.4rem;color:#111827;}
+.combined-sub{color:#6b7280;font-size:.85rem;}
+.print-btn{padding:6px 14px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;color:#374151;}
+.print-btn:hover{background:#f3f4f6;}
+.rep-sec-hdr{font-weight:700;font-size:13px;color:#374151;padding:12px 0 4px;margin-top:8px;display:flex;align-items:center;gap:6px;}
+.rep-sec-hdr span.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
+@media print{
+  .controls,.print-btn,.adj-select{display:none!important;}
+  .paid-input{border:none;background:transparent;width:auto;}
+  body{padding:0 8px;}
+  .panel{break-inside:avoid;}
+}
+@media(min-width:640px){.cards{grid-template-columns:1fr 1fr;}}
+
+.hist-table{width:100%;border-collapse:collapse;font-size:.85rem;}
+.hist-table th{text-align:left;padding:5px 8px;color:#6b7280;font-weight:600;border-bottom:2px solid #e5e7eb;}
+.hist-table td{padding:5px 8px;border-bottom:1px solid #f3f4f6;vertical-align:middle;}
+.hist-table tr:last-child td{border-bottom:none;}
+.hist-table .num{text-align:right;}
+.hist-table .cur-row{background:#eff6ff;font-weight:600;}
+.hist-table .total-row td{font-weight:700;border-top:2px solid #e5e7eb;background:#f9fafb;}
+.hist-table .neg{color:#dc2626;}
+.hist-table .pos{color:#059669;}
+.hist-paid-input{width:90px;border:1px solid #d1d5db;border-radius:4px;padding:2px 6px;font-size:.82rem;text-align:right;color:#111827;}
+.hist-section{display:grid;gap:16px;margin-bottom:16px;}
+@media(min-width:640px){.hist-section{grid-template-columns:1fr 1fr;}}
 </style>
 </head>
 <body>
@@ -67,6 +96,7 @@ tr.total td { font-weight:700; border-top:2px solid #e5e7eb; border-bottom:none;
   <div class="controls">
     <label for="month" style="font-size:12.5px;color:#6b7280;">Month</label>
     <select id="month"></select>
+    <button class="print-btn noprint" onclick="window.print()">&#x1F5A8; Print / Save PDF</button>
     <span class="updated">Data as of September 10, 2026 at 11:00 AM ET &middot; refreshes automatically each morning</span>
   </div>
   <div id="content"></div>
@@ -95,9 +125,113 @@ ORDERS.forEach(o => { const m = edtMonth(o.paymentDate || o.processedAt); if (!m
 const ALL_MONTHS = Object.keys(MONTHS_DATA).sort();
 const nowMs = Date.now() - 4 * 3600000; const CUR_MONTH = new Date(nowMs).toISOString().slice(0, 7);
 const MATT_COLOR = '#2563eb'; const MIKE_COLOR = '#7c3aed'; const COLOR = MODE === 'matt' ? MATT_COLOR : MODE === 'mike' ? MIKE_COLOR : '#059669';
-let chart = null; let selMonth = ALL_MONTHS.includes(CUR_MONTH) ? CUR_MONTH : ALL_MONTHS[ALL_MONTHS.length-1]; function adjApplyTo(id){try{return localStorage.getItem('adj_'+id)||null;}catch(e){return null;}} function setAdjApply(id,m){try{localStorage.setItem('adj_'+id,m);}catch(e){} render();}
+let chart = null; let selMonth = ALL_MONTHS.includes(CUR_MONTH) ? CUR_MONTH : ALL_MONTHS[ALL_MONTHS.length-1]; function adjApplyTo(id){try{return localStorage.getItem('adj_'+id)||null;}catch(e){return null;}} function setAdjApply(id,m){try{localStorage.setItem('adj_'+id,m);}catch(e){} render();} function getPaid(k,m){try{return parseFloat(localStorage.getItem('paid_'+k+'_'+m))||0;}catch(e){return 0;}} function setPaid(k,m,v){try{localStorage.setItem('paid_'+k+'_'+m,String(parseFloat(v)||0));}catch(e){}render();}
 function buildMonthSelect() { const sel = $('month'); ALL_MONTHS.slice().reverse().forEach(m => { const opt = document.createElement('option'); opt.value = m; opt.textContent = fmtMonth(m); if (m === selMonth) opt.selected = true; sel.appendChild(opt); }); sel.addEventListener('change', e => { selMonth = e.target.value; render(); }); }
-function render() { const md = MONTHS_DATA[selMonth] || {net:0, commission:0, pipeline_net:0, orders:[]}; const net = md.net, comm = md.commission, pipe = md.pipeline_net; const orders = md.orders || []; const ytdYear = selMonth.slice(0,4); const ytdMonths = ALL_MONTHS.filter(m => m.startsWith(ytdYear) && m <= selMonth); let ytdComm = 0; ytdMonths.forEach(m => { ytdComm += (MONTHS_DATA[m]||{}).commission||0; }); const adjRep = MODE === 'both' ? ADJUSTMENTS : ADJUSTMENTS.filter(a => a.rep === MODE || a.rep === 'both'); let adjCur = 0; adjRep.forEach(a => { const am = adjApplyTo(a.id)||selMonth; if(am===selMonth) adjCur += a.commDelta||0; }); const commAdj = comm + adjCur; const priorMoList = ALL_MONTHS.filter(m => m < selMonth); let commPaid = 0; priorMoList.forEach(m => { commPaid += (MONTHS_DATA[m]||{}).commission||0; }); adjRep.forEach(a => { const am = adjApplyTo(a.id)||selMonth; if(am < selMonth) commPaid += a.commDelta||0; }); const repName = MODE === 'matt' ? 'Matt Leningham' : MODE === 'mike' ? 'Mike Haney' : 'Matt & Mike'; let cardHTML = `<div class="cards"><div class="card"><div class="rep"><span class="dot" style="background:${COLOR}"></span>${repName}</div><div class="bignum">${fmt(commAdj)}</div><div class="bigsub">${adjCur!==0?'Base '+fmt(comm)+' '+(adjCur>=0?'+':'-')+' '+fmt(Math.abs(adjCur))+' prior-month adj.':'commission — '+fmtMonth(selMonth)}</div><div class="metarow"><div class="m">Net Sales<b>${fmt(net)}</b></div><div class="m">Rate<b>${(RATE*100).toFixed(0)}%</b></div><div class="m">Orders<b>${orders.filter(o => !isPipe(o.status) && (o.net||0) > 0).length}</b></div><div class="m">YTD Commission Paid<b>${fmt(ytdComm)}</b></div></div>`; if (pipe > 0) cardHTML += `<div class="pipeline">&#x23F3; ${fmt(pipe)} pipeline — payment not yet captured</div>`; if(commPaid>0){cardHTML += `<div class="payrow"><span>Commission paid (prior months):</span><b>${fmt(commPaid)}</b></div>`;} cardHTML += `<div class="payrow balance"><span>Balance — ${fmtMonth(selMonth)}:</span><b>${fmt(commAdj)}</b></div>`; cardHTML += `</div></div>`; const months = ALL_MONTHS.filter(m => MONTHS_DATA[m]); const cums = []; let run = 0; months.forEach(m => { run += MONTHS_DATA[m].commission||0; cums.push(run); }); const chartHTML = `<div class="panel"><h2>Cumulative Commission</h2><div class="chartbox"><canvas id="chart"></canvas></div></div>`; const vis = orders.filter(o => (o.net||0) !== 0 || !['VOIDED'].includes(o.status)); let trows = ''; vis.forEach(o => { const dual = (o.matt && o.mike) ? '<span class="badge b-review">DUAL</span>' : ''; trows += `<tr><td>${oLink(o.id, o.name)} ${dual}</td><td>${o.customer||''}</td><td>${o.payDate||'<span class="muted">—</span>'}</td><td>${badge(o.status)}</td><td class="num">${fmt(o.net)}</td><td class="num">${(o.net||0)>0 ? fmt(o.commission) : '—'}</td></tr>`; }); if (!trows) trows = '<tr><td colspan="6" class="empty">No orders this month.</td></tr>'; let totNet = 0, totComm = 0; vis.forEach(o => { totNet += o.net||0; totComm += o.commission||0; }); trows += `<tr class="total"><td colspan="4">Total</td><td class="num">${fmt(totNet)}</td><td class="num">${fmt(totComm)}</td></tr>`; const ordersHTML = `<div class="panel"><h2>Orders — ${fmtMonth(selMonth)}</h2><table><thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Net Sales</th><th class="num">Commission</th></tr></thead><tbody>${trows}</tbody></table></div>`; let adjHTML = ''; const adjFiltered = adjRep; if (adjFiltered && adjFiltered.length > 0) { let arows = ''; adjFiltered.forEach(a => { const delta = (a.curNet||0) - (a.originalNet||0); const sign = delta >= 0 ? 'pos' : 'neg'; const applyOpts=ALL_MONTHS.slice(-4).reverse().map(m=>`<option value="${m}" ${(adjApplyTo(a.id)||selMonth)===m?'selected':''}>${fmtMonth(m)}</option>`).join(''); arows += `<tr><td>${oLink(a.id, a.name)}</td><td>${a.customer||''}</td><td>${fmtMonth(a.month)}</td><td>${a.originalStatus||''} → ${a.curStatus||''}</td><td class="num">${fmt(a.originalNet)}</td><td class="num">${fmt(a.curNet)}</td><td class="num ${sign}">${delta>=0?'+':''}${fmt(delta)}</td><td class="num ${sign}">${(a.commDelta||0)>=0?'+':''}${fmt(a.commDelta)}</td><td><select class="adj-select" onchange="setAdjApply('${a.id}',this.value)">${applyOpts}</select></td></tr>`; }); let adjTotal=0; adjFiltered.forEach(a=>{adjTotal+=a.commDelta||0;}); const adjTotalSign=adjTotal>=0?'+':'-'; arows+=`<tr class="adj-total-row"><td colspan="7">Net commission adjustment</td><td class="num ${adjTotal>=0?'pos':'neg'}">${adjTotal>=0?'+':''}${fmt(adjTotal)}</td><td></td></tr>`; adjHTML = `<div class="panel adjust"><h2>&#x26A0;&#xFE0F; Prior-Month Adjustments (${adjFiltered.length})</h2><p class="note">Orders from prior months whose net sales changed (usually a refund). Use <b>Apply To</b> to choose which month absorbs the commission adjustment.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Month</th><th>Change</th><th class="num">Prev Net</th><th class="num">Curr Net</th><th class="num">Delta</th><th class="num">Comm &Delta;</th><th>Apply To</th></tr></thead><tbody>${arows}</tbody></table></div>`; } let dualHTML = ''; if (DUAL_ORDERS_LIST.length > 0 && MODE === 'both') { let drows = ''; DUAL_ORDERS_LIST.forEach(o => { drows += `<tr class="reviewrow"><td>${oLink(o.id, o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'—'}</td><td>${badge(o.status)}</td><td class="num">${fmt(o.net)}</td></tr>`; }); dualHTML = `<div class="panel" style="border-color:#d1c4f8"><h2>&#x1F50D; Dual-Tagged Orders — Review</h2><p class="note">These orders are tagged both Draft-Matt and Draft-Mike. Commission is counted once in each rep's totals. Verify correct attribution.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Net</th></tr></thead><tbody>${drows}</tbody></table></div>`; } $('content').innerHTML = cardHTML + chartHTML + ordersHTML + adjHTML + dualHTML; const ctx = $('chart'); if (ctx) { if (chart) chart.destroy(); chart = new Chart(ctx, { type: 'line', data: { labels: months.map(fmtMonth), datasets: [{ label: 'Cumulative Commission', data: cums, borderColor: COLOR, backgroundColor: COLOR + '22', fill: true, tension: 0.35, pointRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => '$' + v.toLocaleString() } } } } }); } }
+function render() {
+  const md = MONTHS_DATA[selMonth] || {net:0, commission:0, pipeline_net:0, orders:[]};
+  const net = md.net, comm = md.commission, pipe = md.pipeline_net;
+  const orders = md.orders || [];
+  const ytdYear = selMonth.slice(0,4);
+  const ytdMonths = ALL_MONTHS.filter(m=>m.startsWith(ytdYear)&&m<=selMonth);
+  let ytdComm = 0; ytdMonths.forEach(m=>{ytdComm+=(MONTHS_DATA[m]||{}).commission||0;});
+  const adjRep = ADJUSTMENTS.filter(a=>a.rep===MODE||a.rep==='both');
+  let adjCur = 0; adjRep.forEach(a=>{const am=adjApplyTo(a.id)||selMonth;if(am===selMonth)adjCur+=a.commDelta||0;});
+  const commAdj = comm + adjCur;
+  // Commission paid from localStorage
+  const paid = getPaid(MODE, selMonth);
+  const balance = commAdj - paid;
+  const repName = MODE==='matt' ? 'Matt Leningham' : 'Mike Haney';
+  let cardHTML = `<div class="cards"><div class="card">`;
+  cardHTML += `<div class="rep"><span class="dot" style="background:${COLOR}"></span>${repName}</div>`;
+  cardHTML += `<div class="bignum">${fmt(commAdj)}</div>`;
+  cardHTML += `<div class="bigsub">${adjCur!==0?'Base '+fmt(comm)+' '+(adjCur>=0?'+':'-')+' '+fmt(Math.abs(adjCur))+' prior-month adj.':'commission — '+fmtMonth(selMonth)}</div>`;
+  cardHTML += `<div class="metarow"><div class="m">Net Sales<b>${fmt(net)}</b></div><div class="m">Rate<b>${(RATE*100).toFixed(0)}%</b></div><div class="m">Paid Orders<b>${orders.filter(o=>!isPipe(o.status)&&(o.net||0)>0).length}</b></div><div class="m">YTD Earned<b>${fmt(ytdComm)}</b></div></div>`;
+  if(pipe>0) cardHTML += `<div class="pipeline">&#x23F3; ${fmt(pipe)} pipeline — payment not yet captured</div>`;
+  cardHTML += `<div class="payrow"><span>Commission paid:</span><input type="number" class="paid-input" value="${paid.toFixed(2)}" min="0" step="0.01" onchange="setPaid(MODE,'${selMonth}',this.value)"></div>`;
+  cardHTML += `<div class="payrow balance"><span>Balance — ${fmtMonth(selMonth)}:</span><b>${fmt(balance)}</b></div>`;
+  cardHTML += `</div></div>`;
+  const months = ALL_MONTHS.filter(m=>MONTHS_DATA[m]);
+  const cums=[]; let run=0;
+  months.forEach(m=>{run+=(MONTHS_DATA[m]||{}).commission||0;cums.push(run);});
+  const chartHTML = `<div class="panel"><h2>Cumulative Commission</h2><div class="chartbox"><canvas id="chart"></canvas></div></div>`;
+  const vis = orders.filter(o=>(o.net||0)!==0||!['VOIDED'].includes(o.status));
+  const orderThead = `<thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Gross</th><th class="num">Refunded</th><th class="num">Net Sales</th><th class="num">Commission (1%)</th></tr></thead>`;
+  let trows='',totGross=0,totRef=0,totNet=0,totComm=0;
+  vis.forEach(o=>{
+    const gross=o.gross||o.net||0; const ref=o.refunded||0;
+    trows+=`<tr><td>${oLink(o.id,o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'<span class="muted">—</span>'}</td><td>${badge(o.status)}</td><td class="num">${fmt(gross)}</td><td class="num">${ref>0?'<span style="color:#dc2626">'+fmt(ref)+'</span>':'—'}</td><td class="num">${fmt(o.net)}</td><td class="num">${(o.net||0)>0?fmt(o.commission):'—'}</td></tr>`;
+    totGross+=gross; totRef+=ref; totNet+=o.net||0; totComm+=o.commission||0;
+  });
+  if(!trows) trows='<tr><td colspan="8" class="empty">No orders this month.</td></tr>';
+  else trows+=`<tr class="total"><td colspan="4">Earned total (paid orders only)</td><td class="num">${fmt(totGross)}</td><td class="num">${totRef>0?'<span style="color:#dc2626">'+fmt(totRef)+'</span>':'—'}</td><td class="num">${fmt(totNet)}</td><td class="num">${fmt(totComm)}</td></tr>`;
+  const ordersHTML = `<div class="panel"><h2>Orders — ${fmtMonth(selMonth)}</h2><table style="width:100%">${orderThead}<tbody>${trows}</tbody></table></div>`;
+  let adjHTML = '';
+  if(adjRep.length>0){
+    let arows='';
+    adjRep.forEach(a=>{
+      const delta=(a.curNet||0)-(a.originalNet||0); const sign=delta>=0?'pos':'neg';
+      const applyOpts=ALL_MONTHS.slice(-4).reverse().map(m=>`<option value="${m}" ${(adjApplyTo(a.id)||selMonth)===m?'selected':''}>${fmtMonth(m)}</option>`).join('');
+      arows+=`<tr><td>${oLink(a.id,a.name)}</td><td>${a.customer||''}</td><td>${fmtMonth(a.month)}</td><td>${a.originalStatus||''} → ${a.curStatus||''}</td><td class="num">${fmt(a.originalNet)}</td><td class="num">${fmt(a.curNet)}</td><td class="num ${sign}">${delta>=0?'+':''}${fmt(delta)}</td><td class="num ${sign}">${(a.commDelta||0)>=0?'+':''}${fmt(a.commDelta)}</td><td><select class="adj-select" onchange="setAdjApply('${a.id}',this.value)">${applyOpts}</select></td></tr>`;
+    });
+    let adjTotal=0; adjRep.forEach(a=>{adjTotal+=a.commDelta||0;});
+    arows+=`<tr class="adj-total-row"><td colspan="7">Net commission adjustment</td><td class="num ${adjTotal>=0?'pos':'neg'}">${adjTotal>=0?'+':''}${fmt(adjTotal)}</td><td></td></tr>`;
+    adjHTML=`<div class="panel adjust"><h2>&#x26A0;&#xFE0F; Prior-Month Adjustments (${adjRep.length})</h2><p class="note">Orders from prior months whose net sales changed (usually a refund). Use <b>Apply To</b> to choose which month absorbs the commission adjustment.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Month</th><th>Change</th><th class="num">Prev Net</th><th class="num">Curr Net</th><th class="num">Delta</th><th class="num">Comm &Delta;</th><th>Apply To</th></tr></thead><tbody>${arows}</tbody></table></div>`;
+  }
+
+  // --- Commission History panel ---
+  const histMonths = ALL_MONTHS.filter(m => MONTHS_DATA[m]);
+  let histTotOrders=0, histTotAdj=0, histTotPaid=0;
+  let histRows = '';
+  histMonths.forEach(m => {
+    const ordComm = (MONTHS_DATA[m]||{}).commission||0;
+    // Adjustments applied to this month
+    let adjAmt = 0;
+    adjRep.forEach(a => { const am=adjApplyTo(a.id)||selMonth; if(am===m) adjAmt+=a.commDelta||0; });
+    const net = ordComm + adjAmt;
+    const p = getPaid(MODE, m);
+    const bal = net - p;
+    histTotOrders += ordComm; histTotAdj += adjAmt; histTotPaid += p;
+    const isCur = m === selMonth;
+    const adjCell = adjAmt!==0
+      ? `<span class="${adjAmt<0?'neg':'pos'}">${adjAmt>=0?'+':''}${fmt(adjAmt)}</span>`
+      : `<span style="color:#d1d5db">—</span>`;
+    histRows += `<tr class="${isCur?'cur-row':''}">
+      <td>${fmtMonth(m)}${isCur?' <span style="font-size:.72rem;color:#3b82f6">●</span>':''}</td>
+      <td class="num">${fmt(ordComm)}</td>
+      <td class="num">${adjCell}</td>
+      <td class="num"><b>${fmt(net)}</b></td>
+      <td class="num"><input type="number" class="hist-paid-input" value="${p.toFixed(2)}" min="0" step="0.01"
+        onchange="setPaid(MODE,'${m}',this.value)" title="Enter commission paid for ${fmtMonth(m)}"></td>
+      <td class="num ${bal<0?'neg':bal>0?'pos':''}">${fmt(bal)}</td>
+    </tr>`;
+  });
+  const histTotNet = histTotOrders + histTotAdj;
+  const histTotBal = histTotNet - histTotPaid;
+  histRows += `<tr class="total-row">
+    <td>Total</td>
+    <td class="num">${fmt(histTotOrders)}</td>
+    <td class="num ${histTotAdj!==0?histTotAdj<0?'neg':'pos':''}">${histTotAdj!==0?(histTotAdj>=0?'+':'')+fmt(histTotAdj):'—'}</td>
+    <td class="num"><b>${fmt(histTotNet)}</b></td>
+    <td class="num">${fmt(histTotPaid)}</td>
+    <td class="num ${histTotBal<0?'neg':histTotBal>0?'pos':''}">${fmt(histTotBal)}</td>
+  </tr>`;
+  const historyHTML = `<div class="panel"><h2>Commission History</h2>
+    <p class="note" style="margin-top:-4px;margin-bottom:12px">Enter commission paid each month. <b>Adj.</b> reflects prior-month refunds — use the adjustments table below to set which month each applies to.</p>
+    <table class="hist-table">
+      <thead><tr><th>Month</th><th class="num">Orders</th><th class="num">Adj.</th><th class="num">Total</th><th class="num">Paid</th><th class="num">Balance</th></tr></thead>
+      <tbody>${histRows}</tbody>
+    </table></div>`;
+  $('content').innerHTML = cardHTML + historyHTML + adjHTML + chartHTML + ordersHTML;
+  const ctx = $('chart');
+  if(ctx){
+    if(chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type:'line',
+      data:{labels:months.map(fmtMonth),datasets:[{label:'Cumulative Commission',data:cums,borderColor:COLOR,backgroundColor:COLOR+'22',fill:true,tension:0.35,pointRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+    });
+  }
+}
 buildMonthSelect(); render();
 </script>
 </body>
