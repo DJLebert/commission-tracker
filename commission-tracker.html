@@ -233,7 +233,7 @@ function render() {
 
   // --- Commission History panel ---
   function buildHistory(repKey, repName, color) {
-    const histMonths = ALL_MONTHS.filter(m => MONTHS_DATA[m]);
+    const histMonths = ALL_MONTHS.filter(m => MONTHS_DATA[m]).slice(-5);
     let totOrders=0, totAdj=0, totPaid=0;
     let rows = '';
     histMonths.forEach(m => {

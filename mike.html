@@ -181,7 +181,7 @@ function render() {
   }
 
   // --- Commission History panel ---
-  const histMonths = ALL_MONTHS.filter(m => MONTHS_DATA[m] && m >= '2026-05');
+  const histMonths = ALL_MONTHS.filter(m => MONTHS_DATA[m]).slice(-5);
   let histTotOrders=0, histTotAdj=0, histTotPaid=0;
   let histRows = '';
   histMonths.forEach(m => {
