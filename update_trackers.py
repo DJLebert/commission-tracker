@@ -70,10 +70,20 @@ def fetch_all_orders():
         for edge in edges:
             n = edge["node"]
             payment_date = n["processedAt"]
+            # Prefer CAPTURE (authorized-then-captured) > SALE > processedAt
+            # CAPTURE = actual charge cleared date; SALE = immediate auth+capture
+            capture_date = None
+            sale_date = None
             for txn in n.get("transactions", []):
-                if txn["kind"] == "SALE" and txn["status"] == "SUCCESS":
-                    payment_date = txn["processedAt"]
-                    break
+                if txn["status"] == "SUCCESS":
+                    if txn["kind"] == "CAPTURE":
+                        capture_date = txn["processedAt"]
+                    elif txn["kind"] == "SALE" and sale_date is None:
+                        sale_date = txn["processedAt"]
+            if capture_date:
+                payment_date = capture_date
+            elif sale_date:
+                payment_date = sale_date
             all_orders.append({
                 "name": n["name"],
                 "id": n["id"].split("/")[-1],
