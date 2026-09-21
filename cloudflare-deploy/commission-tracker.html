@@ -231,7 +231,7 @@ function render() {
   if(DUAL_ORDERS_LIST.length>0){
     let drows='';
     DUAL_ORDERS_LIST.forEach(o=>{drows+=`<tr class="reviewrow"><td>${oLink(o.id,o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'—'}</td><td>${badge(o.status)}</td><td class="num">${fmt(o.net)}</td><td class="num">${fmt((o.commission||0)*0.5)}</td></tr>`;});
-    dualHTML=`<div class="panel" style="border-color:#93c5fd;background:#eff6ff"><h2>&#x1F501; Split 50/50 — tagged for both reps (${DUAL_ORDERS_LIST.length})</h2><p class="note">These orders carry both <code>Draft-Matt</code> and <code>Draft-Mike</code> tags — commission is split 50/50 and counted in each rep’s totals above.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Net</th><th class="num">Each Rep (50%)</th></tr></thead><tbody>${drows}</tbody></table></div>`;
+    dualHTML=`<div class="panel" style="border-color:#93c5fd;background:#eff6ff"><h2>&#x1F501; Split 50/50 — tagged for both reps (${DUAL_ORDERS_LIST.length})</h2><p class="note">These orders carry both <code>Draft-Matt</code> and <code>Draft-Mike</code> tags, so they are not counted in either rep’s totals. Decide who gets credit and fix the tag in Shopify.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Net</th><th class="num">Each Rep (50%)</th></tr></thead><tbody>${drows}</tbody></table></div>`;
   }
 
   // --- Commission History panel ---
