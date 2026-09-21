@@ -42,6 +42,7 @@ tr.total td { font-weight:700; border-top:2px solid #e5e7eb; border-bottom:none;
 .b-refund { background:#fde7e7; color:#b42318; }
 .b-void { background:#eceef1; color:#6b7280; }
 .b-review { background:#ede7fb; color:#6429c9; }
+.b-split { background:#dbeafe; color:#1d4ed8; }
 .muted { color:#9ca3af; }
 .neg { color:#b42318; font-weight:600; }
 .pos { color:#1a7f3c; font-weight:600; }
@@ -121,7 +122,7 @@ function hasMatt(tags) { return (tags||[]).some(t => t.toLowerCase().trim() === 
 function hasMike(tags) { return (tags||[]).some(t => t.toLowerCase().trim() === 'draft-mike'); }
 function isPipe(status) { const s = (status||'').toLowerCase(); return s === 'pending' || s === 'partially_paid' || s === 'authorized'; }
 const MONTHS_DATA = {}; const DUAL_ORDERS_LIST = []; const seenDual = new Set();
-ORDERS.forEach(o => { const m = edtMonth(o.paymentDate || o.processedAt); if (!m) return; if (!MONTHS_DATA[m]) MONTHS_DATA[m] = {net:0, commission:0, pipeline_net:0, orders:[]}; const md = MONTHS_DATA[m]; const pipe = isPipe(o.status); const commission = pipe ? 0 : (o.net||0) * RATE; const matt = hasMatt(o.tags); const mike = hasMike(o.tags); const enriched = {...o, payDate: edtDateStr(o.paymentDate || o.processedAt), commission, matt, mike}; md.orders.push(enriched); if (pipe) { md.pipeline_net += o.net||0; } else { md.net += o.net||0; md.commission += commission; } if (MODE === 'both' && matt && mike && !seenDual.has(o.name)) { seenDual.add(o.name); DUAL_ORDERS_LIST.push(enriched); } });
+ORDERS.forEach(o => { const m = edtMonth(o.paymentDate || o.processedAt); if (!m) return; if (!MONTHS_DATA[m]) MONTHS_DATA[m] = {net:0, commission:0, pipeline_net:0, orders:[]}; const md = MONTHS_DATA[m]; const pipe = isPipe(o.status); const commission = pipe ? 0 : (o.net||0) * RATE; const matt = hasMatt(o.tags); const mike = hasMike(o.tags); const enriched = {...o, payDate: edtDateStr(o.paymentDate || o.processedAt), commission, matt, mike, split: (matt && mike)}; md.orders.push(enriched); if (pipe) { md.pipeline_net += o.net||0; } else { md.net += o.net||0; md.commission += commission; } if (MODE === 'both' && matt && mike && !seenDual.has(o.name)) { seenDual.add(o.name); DUAL_ORDERS_LIST.push(enriched); } });
 const ALL_MONTHS = Object.keys(MONTHS_DATA).sort();
 const nowMs = Date.now() - 4 * 3600000; const CUR_MONTH = new Date(nowMs).toISOString().slice(0, 7);
 const MATT_COLOR = '#2563eb'; const MIKE_COLOR = '#7c3aed'; const COLOR = MODE === 'matt' ? MATT_COLOR : MODE === 'mike' ? MIKE_COLOR : '#059669';
@@ -129,11 +130,11 @@ let chart = null; let selMonth = ALL_MONTHS.includes(CUR_MONTH) ? CUR_MONTH : AL
 function buildMonthSelect() { const sel = $('month'); ALL_MONTHS.slice().reverse().forEach(m => { const opt = document.createElement('option'); opt.value = m; opt.textContent = fmtMonth(m); if (m === selMonth) opt.selected = true; sel.appendChild(opt); }); sel.addEventListener('change', e => { selMonth = e.target.value; render(); }); }
 function render() {
   const md = MONTHS_DATA[selMonth] || {net:0, commission:0, pipeline_net:0, orders:[]};
-  const net = md.net, comm = md.commission, pipe = md.pipeline_net;
+  let net=0,comm=0,pipe=0; (md.orders||[]).forEach(o=>{const f=o.split?0.5:1;if(isPipe(o.status)){pipe+=(o.net||0)*f;}else{net+=(o.net||0)*f;comm+=(o.commission||0)*f;}});
   const orders = md.orders || [];
   const ytdYear = selMonth.slice(0,4);
   const ytdMonths = ALL_MONTHS.filter(m=>m.startsWith(ytdYear)&&m<=selMonth);
-  let ytdComm = 0; ytdMonths.forEach(m=>{ytdComm+=(MONTHS_DATA[m]||{}).commission||0;});
+  let ytdComm = 0; ytdMonths.forEach(m=>{(MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status))ytdComm+=(o.commission||0)*(o.split?0.5:1);});});
   const adjRep = ADJUSTMENTS.filter(a=>a.rep===MODE||a.rep==='both');
   let adjCur = 0; adjRep.forEach(a=>{const am=adjApplyTo(a.id)||selMonth;if(am===selMonth)adjCur+=a.commDelta||0;});
   const commAdj = comm + adjCur;
@@ -152,15 +153,15 @@ function render() {
   cardHTML += `</div></div>`;
   const months = ALL_MONTHS.filter(m=>MONTHS_DATA[m]);
   const cums=[]; let run=0;
-  months.forEach(m=>{run+=(MONTHS_DATA[m]||{}).commission||0;cums.push(run);});
+  months.forEach(m=>{(MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status))run+=(o.commission||0)*(o.split?0.5:1);});cums.push(run);});
   const chartHTML = `<div class="panel"><h2>Cumulative Commission</h2><div class="chartbox"><canvas id="chart"></canvas></div></div>`;
   const vis = orders.filter(o=>(o.net||0)!==0||!['VOIDED'].includes(o.status));
   const orderThead = `<thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Gross</th><th class="num">Refunded</th><th class="num">Net Sales</th><th class="num">Commission (1%)</th></tr></thead>`;
   let trows='',totGross=0,totRef=0,totNet=0,totComm=0;
   vis.forEach(o=>{
     const gross=o.gross||o.net||0; const ref=o.refunded||0;
-    trows+=`<tr><td>${oLink(o.id,o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'<span class="muted">—</span>'}</td><td>${badge(o.status)}</td><td class="num">${fmt(gross)}</td><td class="num">${ref>0?'<span style="color:#dc2626">'+fmt(ref)+'</span>':'—'}</td><td class="num">${fmt(o.net)}</td><td class="num">${(o.net||0)>0?fmt(o.commission):'—'}</td></tr>`;
-    totGross+=gross; totRef+=ref; totNet+=o.net||0; totComm+=o.commission||0;
+    const sf=o.split?0.5:1; const dc=(o.net||0)>0?fmt((o.commission||0)*sf):'—'; const sb=o.split?'<span class="badge b-split">½ Split</span>':''; trows+=`<tr><td>${oLink(o.id,o.name)}${sb}</td><td>${o.customer||''}</td><td>${o.payDate||'<span class="muted">—</span>'}</td><td>${badge(o.status)}</td><td class="num">${fmt(gross)}</td><td class="num">${ref>0?'<span style="color:#dc2626">'+fmt(ref)+'</span>':'—'}</td><td class="num">${fmt(o.net)}</td><td class="num">${dc}</td></tr>`;
+    totGross+=gross; totRef+=ref; totNet+=o.net||0; totComm+=(o.commission||0)*(o.split?0.5:1);
   });
   if(!trows) trows='<tr><td colspan="8" class="empty">No orders this month.</td></tr>';
   else trows+=`<tr class="total"><td colspan="4">Earned total (paid orders only)</td><td class="num">${fmt(totGross)}</td><td class="num">${totRef>0?'<span style="color:#dc2626">'+fmt(totRef)+'</span>':'—'}</td><td class="num">${fmt(totNet)}</td><td class="num">${fmt(totComm)}</td></tr>`;
@@ -183,7 +184,7 @@ function render() {
   let histTotOrders=0, histTotAdj=0, histTotPaid=0;
   let histRows = '';
   histMonths.forEach(m => {
-    const ordComm = (MONTHS_DATA[m]||{}).commission||0;
+    let ordComm=0; (MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status))ordComm+=(o.commission||0)*(o.split?0.5:1);});
     // Adjustments applied to this month
     let adjAmt = 0;
     adjRep.forEach(a => { const am=adjApplyTo(a.id)||selMonth; if(am===m) adjAmt+=a.commDelta||0; });

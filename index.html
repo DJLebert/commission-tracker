@@ -42,6 +42,7 @@ tr.total td { font-weight:700; border-top:2px solid #e5e7eb; border-bottom:none;
 .b-refund { background:#fde7e7; color:#b42318; }
 .b-void { background:#eceef1; color:#6b7280; }
 .b-review { background:#ede7fb; color:#6429c9; }
+.b-split { background:#dbeafe; color:#1d4ed8; }
 .muted { color:#9ca3af; }
 .neg { color:#b42318; font-weight:600; }
 .pos { color:#1a7f3c; font-weight:600; }
@@ -121,7 +122,7 @@ function hasMatt(tags) { return (tags||[]).some(t => t.toLowerCase().trim() === 
 function hasMike(tags) { return (tags||[]).some(t => t.toLowerCase().trim() === 'draft-mike'); }
 function isPipe(status) { const s = (status||'').toLowerCase(); return s === 'pending' || s === 'partially_paid' || s === 'authorized'; }
 const MONTHS_DATA = {}; const DUAL_ORDERS_LIST = []; const seenDual = new Set();
-ORDERS.forEach(o => { const m = edtMonth(o.paymentDate || o.processedAt); if (!m) return; if (!MONTHS_DATA[m]) MONTHS_DATA[m] = {net:0, commission:0, pipeline_net:0, orders:[]}; const md = MONTHS_DATA[m]; const pipe = isPipe(o.status); const commission = pipe ? 0 : (o.net||0) * RATE; const matt = hasMatt(o.tags); const mike = hasMike(o.tags); const enriched = {...o, payDate: edtDateStr(o.paymentDate || o.processedAt), commission, matt, mike}; md.orders.push(enriched); if (pipe) { md.pipeline_net += o.net||0; } else { md.net += o.net||0; md.commission += commission; } if (MODE === 'both' && matt && mike && !seenDual.has(o.name)) { seenDual.add(o.name); DUAL_ORDERS_LIST.push(enriched); } });
+ORDERS.forEach(o => { const m = edtMonth(o.paymentDate || o.processedAt); if (!m) return; if (!MONTHS_DATA[m]) MONTHS_DATA[m] = {net:0, commission:0, pipeline_net:0, orders:[]}; const md = MONTHS_DATA[m]; const pipe = isPipe(o.status); const commission = pipe ? 0 : (o.net||0) * RATE; const matt = hasMatt(o.tags); const mike = hasMike(o.tags); const enriched = {...o, payDate: edtDateStr(o.paymentDate || o.processedAt), commission, matt, mike, split: (matt && mike)}; md.orders.push(enriched); if (pipe) { md.pipeline_net += o.net||0; } else { md.net += o.net||0; md.commission += commission; } if (MODE === 'both' && matt && mike && !seenDual.has(o.name)) { seenDual.add(o.name); DUAL_ORDERS_LIST.push(enriched); } });
 const ALL_MONTHS = Object.keys(MONTHS_DATA).sort();
 const nowMs = Date.now() - 4 * 3600000; const CUR_MONTH = new Date(nowMs).toISOString().slice(0, 7);
 const MATT_COLOR = '#2563eb'; const MIKE_COLOR = '#7c3aed'; const COLOR = MODE === 'matt' ? MATT_COLOR : MODE === 'mike' ? MIKE_COLOR : '#059669';
@@ -131,11 +132,11 @@ function render() {
   const md = MONTHS_DATA[selMonth] || {net:0, commission:0, pipeline_net:0, orders:[]};
   const orders = md.orders || [];
   // Solo orders per rep
-  const mattSolo = orders.filter(o => o.matt && !o.mike);
-  const mikeSolo = orders.filter(o => o.mike && !o.matt);
+  const mattSolo = orders.filter(o => o.matt);
+  const mikeSolo = orders.filter(o => o.mike);
   function repStats(list) {
     let net=0,comm=0,pipe=0,cnt=0;
-    list.forEach(o => { if(isPipe(o.status)){pipe+=o.net||0;} else {net+=o.net||0;comm+=o.commission||0;if((o.net||0)>0)cnt++;} });
+    list.forEach(o => { const f=o.split?0.5:1; if(isPipe(o.status)){pipe+=(o.net||0)*f;} else {net+=(o.net||0)*f;comm+=(o.commission||0)*f;if((o.net||0)>0)cnt++;} });
     return {net,comm,pipe,cnt};
   }
   const mattS = repStats(mattSolo);
@@ -153,7 +154,7 @@ function render() {
   const ytdYear = selMonth.slice(0,4);
   const ytdMonths = ALL_MONTHS.filter(m=>m.startsWith(ytdYear)&&m<=selMonth);
   let mattYtd=0,mikeYtd=0;
-  ytdMonths.forEach(m=>{(MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status)){if(o.matt&&!o.mike)mattYtd+=o.commission||0;if(o.mike&&!o.matt)mikeYtd+=o.commission||0;}});});
+  ytdMonths.forEach(m=>{(MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status)){if(o.matt)mattYtd+=(o.commission||0)*(o.split?0.5:1);if(o.mike)mikeYtd+=(o.commission||0)*(o.split?0.5:1);}});});
   // Commission paid (localStorage per rep)
   const mattPaid = getPaid('matt',selMonth);
   const mikePaid = getPaid('mike',selMonth);
@@ -186,7 +187,7 @@ function render() {
   let mRun=0,kRun=0;
   months.forEach(m=>{
     let mn=0,kn=0;
-    (MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status)){if(o.matt&&!o.mike)mn+=o.commission||0;if(o.mike&&!o.matt)kn+=o.commission||0;}});
+    (MONTHS_DATA[m]||{orders:[]}).orders.forEach(o=>{if(!isPipe(o.status)){if(o.matt)mn+=(o.commission||0)*(o.split?0.5:1);if(o.mike)kn+=(o.commission||0)*(o.split?0.5:1);}});
     mRun+=mn; kRun+=kn; mattCums.push(mRun); mikeCums.push(kRun);
   });
   const chartHTML = `<div class="panel"><h2>Commission earned through the month</h2><div class="chartbox"><canvas id="chart"></canvas></div></div>`;
@@ -198,8 +199,8 @@ function render() {
     let rows='',totGross=0,totRef=0,totNet=0,totComm=0;
     vis.forEach(o=>{
       const gross=o.gross||o.net||0; const ref=o.refunded||0;
-      rows+=`<tr><td>${oLink(o.id,o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'<span class="muted">—</span>'}</td><td>${badge(o.status)}</td><td class="num">${fmt(gross)}</td><td class="num">${ref>0?'<span style="color:#dc2626">'+fmt(ref)+'</span>':'—'}</td><td class="num">${fmt(o.net)}</td><td class="num">${(o.net||0)>0?fmt(o.commission):'—'}</td></tr>`;
-      totGross+=gross; totRef+=ref; totNet+=o.net||0; totComm+=o.commission||0;
+      const sf=o.split?0.5:1; const dc=(o.net||0)>0?fmt((o.commission||0)*sf):'—'; const sb=o.split?'<span class="badge b-split">½ Split</span>':''; rows+=`<tr><td>${oLink(o.id,o.name)}${sb}</td><td>${o.customer||''}</td><td>${o.payDate||'<span class="muted">—</span>'}</td><td>${badge(o.status)}</td><td class="num">${fmt(gross)}</td><td class="num">${ref>0?'<span style="color:#dc2626">'+fmt(ref)+'</span>':'—'}</td><td class="num">${fmt(o.net)}</td><td class="num">${dc}</td></tr>`;
+      totGross+=gross; totRef+=ref; totNet+=o.net||0; totComm+=(o.commission||0)*(o.split?0.5:1);
     });
     rows+=`<tr class="total"><td colspan="4">Earned total (paid orders only)</td><td class="num">${fmt(totGross)}</td><td class="num">${totRef>0?'<span style="color:#dc2626">'+fmt(totRef)+'</span>':'—'}</td><td class="num">${fmt(totNet)}</td><td class="num">${fmt(totComm)}</td></tr>`;
     return rows;
@@ -229,8 +230,8 @@ function render() {
   let dualHTML = '';
   if(DUAL_ORDERS_LIST.length>0){
     let drows='';
-    DUAL_ORDERS_LIST.forEach(o=>{drows+=`<tr class="reviewrow"><td>${oLink(o.id,o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'—'}</td><td>${badge(o.status)}</td><td class="num">${fmt(o.net)}</td></tr>`;});
-    dualHTML=`<div class="panel" style="border-color:#d1c4f8"><h2>&#x1F50D; Needs review — tagged for both reps (${DUAL_ORDERS_LIST.length})</h2><p class="note">These orders carry both <code>Draft-Matt</code> and <code>Draft-Mike</code> tags, so they are not counted in either rep’s totals. Decide who gets credit and fix the tag in Shopify.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Net</th></tr></thead><tbody>${drows}</tbody></table></div>`;
+    DUAL_ORDERS_LIST.forEach(o=>{drows+=`<tr class="reviewrow"><td>${oLink(o.id,o.name)}</td><td>${o.customer||''}</td><td>${o.payDate||'—'}</td><td>${badge(o.status)}</td><td class="num">${fmt(o.net)}</td><td class="num">${fmt((o.commission||0)*0.5)}</td></tr>`;});
+    dualHTML=`<div class="panel" style="border-color:#93c5fd;background:#eff6ff"><h2>&#x1F501; Split 50/50 — tagged for both reps (${DUAL_ORDERS_LIST.length})</h2><p class="note">These orders carry both <code>Draft-Matt</code> and <code>Draft-Mike</code> tags — commission is split 50/50 and counted in each rep’s totals above.</p><table><thead><tr><th>Order</th><th>Customer</th><th>Payment Date</th><th>Status</th><th class="num">Net</th><th class="num">Each Rep (50%)</th></tr></thead><tbody>${drows}</tbody></table></div>`;
   }
 
   // --- Commission History panel ---
@@ -243,8 +244,8 @@ function render() {
       let ordComm = 0;
       mo.orders.forEach(o => {
         if(!isPipe(o.status)) {
-          if(repKey==='matt' && o.matt && !o.mike) ordComm += o.commission||0;
-          if(repKey==='mike' && o.mike && !o.matt) ordComm += o.commission||0;
+          if(repKey==='matt' && o.matt) ordComm += (o.commission||0)*(o.split?0.5:1);
+          if(repKey==='mike' && o.mike) ordComm += (o.commission||0)*(o.split?0.5:1);
         }
       });
       // Adjustments applied to this month for this rep
